@@ -20,6 +20,7 @@
 //============================================================================
 
 module sys_top
+	import sys_pkg::*;
 (
 	/////////// CLOCK //////////
 	input         FPGA_CLK1_50,
@@ -73,13 +74,13 @@ module sys_top
 	output  [5:0] VGA_G,
 	output  [5:0] VGA_B,
 	inout         VGA_HS,  // VGA_HS is secondary SD card detect when VGA_EN = 1 (inactive)
-	output		  VGA_VS,
+	inout		  VGA_VS,
 	input         VGA_EN,  // active low
 
 	/////////// AUDIO //////////
 	output		  AUDIO_L,
 	output		  AUDIO_R,
-	output		  AUDIO_SPDIF,
+	inout		  AUDIO_SPDIF,
 
 	//////////// SDIO ///////////
 	inout   [3:0] SDIO_DAT,
@@ -87,22 +88,22 @@ module sys_top
 	output        SDIO_CLK,
 
 	//////////// I/O ///////////
-	output        LED_USER,
-	output        LED_HDD,
-	output        LED_POWER,
+	inout         LED_USER,
+	inout         LED_HDD,
+	inout         LED_POWER,
 	input         BTN_USER,
 	input         BTN_OSD,
 	input         BTN_RESET,
 `endif
 
 	////////// I/O ALT /////////
-	output        SD_SPI_CS,
+	inout         SD_SPI_CS,
 	input         SD_SPI_MISO,
-	output        SD_SPI_CLK,
-	output        SD_SPI_MOSI,
+	inout         SD_SPI_CLK,
+	inout         SD_SPI_MOSI,
 
 	inout         SDCD_SPDIF,
-	output        IO_SCL,
+	inout         IO_SCL,
 	inout         IO_SDA,
 
 	////////// ADC //////////////
@@ -124,13 +125,58 @@ module sys_top
 	inout   [6:0] USER_IO
 );
 
+//////////////////////  JAMMA Mode  //////////////////////////////////////
+// Input/Output via JAMMA/NeoGeo MVS with minimal active circuitry
+// AUDIO_L (& AUDIO_R) require a small power amplifier (e.g. TDA2822)
+// JAMMA/MVS audio jumper: JAMMA.11 solder side GND for JAMMA, AudioR for MVS.
+// All other connections straight to JAMMA fingerboard.
+// Optional - 1k series resistors on JAMMA inputs in case of bad cab wiring
+wire jamma_mode;
+assign jamma_mode = 1'b1; // high to enable Jamma Mode
+//     1) add 5k6 pull-down to AUDIO_L pin - will be sufficent to overcome WEAK_PULL_UP_RESISTOR without affecting operation
+//     2) at power-on-reset, set AUDIO_L to Z & wait a bit
+//     3) set jamma_mode to 1 if AUDIO_L is low
+//     4) connect AUDIO_L to anl
+//     where is power-on-reset?
+// SW[2] doesn't seem to be used for anything. Could use that instead?
+
+
+jamma_in_t jamma_in;
+// No switch debounce logic applied. Assumes cores retain required debounce logic (likely in software)
+assign jamma_in.p[0].udlr      = ~USER_IO[3:0]; // {P7.6, P7.5, P7.2, P7.1} on MiSTer IO board 
+assign jamma_in.p[0].button[5] = ~AUDIO_SPDIF;	// P1.9 on MiSTer IO board. CPS "P0 HEAVY KICK"
+assign jamma_in.p[0].button[4] = ~VGA_VS;		// P1.19 on MiSTer IO board. NeoGeo MVS "SELECT UP". CPS "P0 MEDIUM KICK"
+assign jamma_in.p[0].button[3] = ~USER_IO[6];   // P7.10 on MiSTer IO board. CPS "P0 LIGHT KICK"
+assign jamma_in.p[0].button[2] = ~SD_SPI_CS;    // P7.9 on MiSTer IO board
+assign jamma_in.p[0].button[1] = ~USER_IO[5];   // P7.8 on MiSTer IO board
+assign jamma_in.p[0].button[0] = ~USER_IO[4];   // P7.7 on MiSTer IO board
+assign jamma_in.p[0].coin      = ~SD_SPI_MISO;  // P6.1 on MiSTer IO board
+assign jamma_in.p[0].start     = ~SD_SPI_CLK;   // P6.2 on MiSTer IO board
+assign jamma_in.p[1].udlr      = ~SDIO_DAT;		// {P1.6, P1.4, P1.18, P1.16} on MiSTer IO board 
+assign jamma_in.p[1].button[5] = ~IO_SCL;		// P6.4 on MiSTer IO board. CPS "P1 HEAVY KICK"
+assign jamma_in.p[1].button[4] = ~SDCD_SPDIF;	// P9.1 on MiSTer IO board. NeoGeo MVS "SELECT DOWN". CPS "P1 MEDIUM KICK"
+assign jamma_in.p[1].button[3] = ~SDIO_CLK;		// P1.14 on MiSTer IO board. CPS "P1 LIGHT KICK"
+assign jamma_in.p[1].button[2] = ~SDIO_CMD;		// P1.8 on MiSTer IO board
+assign jamma_in.p[1].button[1] = ~SD_SPI_MOSI;	// P6.3 on MiSTer IO board
+assign jamma_in.p[1].button[0] = ~LED_USER;		// P1.1 on MiSTer IO board
+assign jamma_in.p[1].coin      = ~LED_POWER;	// P1.3 on MiSTer IO board
+assign jamma_in.p[1].start     = ~LED_HDD;		// P1.5 on MiSTer IO board
+assign jamma_in.test		   = ~BTN_USER;		// Usually enables Jamma board test mode. Drive BTN_OSD with this Jamma pin & lose access to Jamma board test modes?
+assign jamma_in.service		   = 0;				// Usually causes Jamma board to add a credit. No point for MiSTer?
+// more pins which could be repurposed for Jamma input
+// IO_SDA, P6.5 on MiSTer IO
+// BTN_OSD, P1.13 on MiSTer IO board
+// BTN_RESET, P1.17 on MiSTer IO board
+
+
+
 //////////////////////  Secondary SD  ///////////////////////////////////
 
 `ifndef DUAL_SDRAM
 	assign SDIO_DAT  = 4'bZZZZ;
 	assign SDIO_CLK  = 1'bZ;
 	assign SDIO_CMD  = 1'bZ;
-	assign SD_SPI_CS = mcp_sdcd ? ((~VGA_EN & sog & ~cs1) ? 1'b1 : 1'bZ) : 1'bZ;
+	assign SD_SPI_CS = (mcp_sdcd & ~jamma_mode) ? ((~VGA_EN & sog & ~cs1) ? 1'b1 : 1'bZ) : 1'bZ;
 `else
 	assign SD_SPI_CS = 1'bZ;
 `endif
@@ -148,9 +194,9 @@ wire led_u = ~led_user;
 wire led_locked;
 
 `ifndef DUAL_SDRAM
-	assign LED_POWER = (SW[3] | led_p) ? 1'bZ : 1'b0;
-	assign LED_HDD   = (SW[3] | led_d) ? 1'bZ : 1'b0;
-	assign LED_USER  = (SW[3] | led_u) ? 1'bZ : 1'b0;
+	assign LED_POWER = (SW[3] | led_p | jamma_mode) ? 1'bZ : 1'b0;
+	assign LED_HDD   = (SW[3] | led_d | jamma_mode) ? 1'bZ : 1'b0;
+	assign LED_USER  = (SW[3] | led_u | jamma_mode) ? 1'bZ : 1'b0;
 `endif
 
 //LEDs on main board
@@ -165,6 +211,9 @@ wire btn_r, btn_o, btn_u;
 
 wire [2:0] mcp_btn;
 wire       mcp_sdcd;
+wire       mcp_scl;
+assign IO_SCL = jamma_mode ? 1'bZ : mcp_scl;
+
 mcp23009 mcp23009
 (
 	.clk(FPGA_CLK2_50),
@@ -173,7 +222,7 @@ mcp23009 mcp23009
 	.led({led_p, led_d, led_u}),
 	.sd_cd(mcp_sdcd),
 
-	.scl(IO_SCL),
+	.scl(mcp_scl),
 	.sda(IO_SDA)
 );
 
@@ -980,21 +1029,21 @@ csync csync_vga(clk_vid, vga_hs_osd, vga_vs_osd, vga_cs_osd);
 	wire hs1 = vga_scaler ? hdmi_hs_osd : vga_hs_osd;
 	wire cs1 = vga_scaler ? hdmi_cs_osd : vga_cs_osd;
 
-	assign VGA_VS = (VGA_EN | SW[3]) ? 1'bZ      : csync_en ? 1'b1 : ~vs1;
-	assign VGA_HS = (VGA_EN | SW[3]) ? 1'bZ      : csync_en ? ~cs1 : ~hs1;
-	assign VGA_R  = (VGA_EN | SW[3]) ? 6'bZZZZZZ : vga_o[23:18];
-	assign VGA_G  = (VGA_EN | SW[3]) ? 6'bZZZZZZ : vga_o[15:10];
-	assign VGA_B  = (VGA_EN | SW[3]) ? 6'bZZZZZZ : vga_o[7:2];
+	assign VGA_VS = (VGA_EN | SW[3] | jamma_mode) ? 1'bZ      : csync_en ? 1'b1 : ~vs1;
+	assign VGA_HS = (VGA_EN | SW[3])              ? 1'bZ      : (csync_en | jamma_mode) ? ~cs1 : ~hs1;
+	assign VGA_R  = (VGA_EN | SW[3])              ? 6'bZZZZZZ : vga_o[23:18];
+	assign VGA_G  = (VGA_EN | SW[3])              ? 6'bZZZZZZ : vga_o[15:10];
+	assign VGA_B  = (VGA_EN | SW[3])              ? 6'bZZZZZZ : vga_o[7:2];
 `endif
 
 /////////////////////////  Audio output  ////////////////////////////////
 
-assign SDCD_SPDIF =(SW[3] & ~spdif) ? 1'b0 : 1'bZ;
+assign SDCD_SPDIF =(SW[3] & ~spdif & ~jamma_mode) ? 1'b0 : 1'bZ;
 
 `ifndef DUAL_SDRAM
 	wire anl,anr;
 
-	assign AUDIO_SPDIF = SW[3] ? 1'bZ : SW[0] ? HDMI_LRCLK : spdif;
+	assign AUDIO_SPDIF = (SW[3] | jamma_mode) ? 1'bZ : SW[0] ? HDMI_LRCLK : spdif;
 	assign AUDIO_R     = SW[3] ? 1'bZ : SW[0] ? HDMI_I2S   : anr;
 	assign AUDIO_L     = SW[3] ? 1'bZ : SW[0] ? HDMI_SCLK  : anl;
 `endif
@@ -1085,13 +1134,13 @@ alsa alsa
 
 ////////////////  User I/O (USB 3.0 connector) /////////////////////////
 
-assign USER_IO[0] =                       !user_out[0]  ? 1'b0 : 1'bZ;
-assign USER_IO[1] =                       !user_out[1]  ? 1'b0 : 1'bZ;
-assign USER_IO[2] = !(SW[1] ? HDMI_I2S   : user_out[2]) ? 1'b0 : 1'bZ;
-assign USER_IO[3] =                       !user_out[3]  ? 1'b0 : 1'bZ;
-assign USER_IO[4] = !(SW[1] ? HDMI_SCLK  : user_out[4]) ? 1'b0 : 1'bZ;
-assign USER_IO[5] = !(SW[1] ? HDMI_LRCLK : user_out[5]) ? 1'b0 : 1'bZ;
-assign USER_IO[6] =                       !user_out[6]  ? 1'b0 : 1'bZ;
+assign USER_IO[0] =                       !(jamma_mode | user_out[0])  ? 1'b0 : 1'bZ;
+assign USER_IO[1] =                       !(jamma_mode | user_out[1])  ? 1'b0 : 1'bZ;
+assign USER_IO[2] = !(SW[1] ? HDMI_I2S   : (jamma_mode | user_out[2])) ? 1'b0 : 1'bZ;
+assign USER_IO[3] =                       !(jamma_mode | user_out[3])  ? 1'b0 : 1'bZ;
+assign USER_IO[4] = !(SW[1] ? HDMI_SCLK  : (jamma_mode | user_out[4])) ? 1'b0 : 1'bZ;
+assign USER_IO[5] = !(SW[1] ? HDMI_LRCLK : (jamma_mode | user_out[5])) ? 1'b0 : 1'bZ;
+assign USER_IO[6] =                       !(jamma_mode | user_out[6])  ? 1'b0 : 1'bZ;
 
 assign user_in[0] =         USER_IO[0];
 assign user_in[1] =         USER_IO[1];
@@ -1221,7 +1270,8 @@ emu emu
 `endif
 
 	.USER_OUT(user_out),
-	.USER_IN(user_in)
+	.USER_IN(user_in),
+	.JAMMA_IN(jamma_in) // OR control inputs as needed in core
 );
 
 endmodule
