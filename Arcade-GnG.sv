@@ -231,17 +231,17 @@ end
 
 wire [9:0] joy = joy_0 | joy_1;
 
-wire m_up     = btn_up    | joy[3] | JAMMA_IN.p[0].udlr[3];
-wire m_down   = btn_down  | joy[2] | JAMMA_IN.p[0].udlr[2];
-wire m_left   = btn_left  | joy[1] | JAMMA_IN.p[0].udlr[1];
-wire m_right  = btn_right | joy[0] | JAMMA_IN.p[0].udlr[0];
-wire m_fire   = btn_fire1 | joy[4] | JAMMA_IN.p[0].button[0];
-wire m_jump   = btn_fire2 | joy[5] | JAMMA_IN.p[0].button[1];
+wire m_up     = btn_up    | joy[3] | JAMMA_IN.p[1].u;
+wire m_down   = btn_down  | joy[2] | JAMMA_IN.p[1].d;
+wire m_left   = btn_left  | joy[1] | JAMMA_IN.p[1].l;
+wire m_right  = btn_right | joy[0] | JAMMA_IN.p[1].r;
+wire m_fire   = btn_fire1 | joy[4] | JAMMA_IN.p[1].button[1];
+wire m_jump   = btn_fire2 | joy[5] | JAMMA_IN.p[1].button[2];
 wire m_pause  = btn_pause | joy[9];
 
-wire m_start1 = btn_one_player  | joy[6] | JAMMA_IN.p[0].start;
-wire m_start2 = btn_two_players | joy[7] | JAMMA_IN.p[1].start;
-wire m_coin   = btn_coin        | joy[8] | JAMMA_IN.p[1].coin | JAMMA_IN.p[0].coin;
+wire m_start1 = btn_one_player  | joy[6] | JAMMA_IN.p[1].start;
+wire m_start2 = btn_two_players | joy[7] | JAMMA_IN.p[2].start;
+wire m_coin   = btn_coin        | joy[8] | JAMMA_IN.p[2].coin | JAMMA_IN.p[1].coin;
 
 reg pause = 0;
 always @(posedge clk_sys) begin

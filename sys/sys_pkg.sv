@@ -2,15 +2,18 @@
 package sys_pkg;
     // JammaMode
     typedef struct packed {
-        logic [3:0] udlr;
-        logic [5:0] button;
+        logic u;
+        logic d;
+        logic l;
+        logic r;
+        logic [6:1] button;
         logic coin;
         logic start;
     } jamma_player_t;
     
     typedef struct packed {
-        jamma_player_t [1:0] p;
+        jamma_player_t [2:1] p;
         logic test;
-        logic service;
+        logic select;
     } jamma_in_t;
 endpackage

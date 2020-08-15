@@ -127,48 +127,62 @@ module sys_top
 
 //////////////////////  JAMMA Mode  //////////////////////////////////////
 // Input/Output via JAMMA/NeoGeo MVS with minimal active circuitry
-// AUDIO_L (& AUDIO_R) require a small power amplifier (e.g. TDA2822)
-// JAMMA/MVS audio jumper: JAMMA.11 solder side GND for JAMMA, AudioR for MVS.
-// All other connections straight to JAMMA fingerboard.
-// Optional - 1k series resistors on JAMMA inputs in case of bad cab wiring
 wire jamma_mode;
 assign jamma_mode = 1'b1; // high to enable Jamma Mode
-//     1) add 5k6 pull-down to AUDIO_L pin - will be sufficent to overcome WEAK_PULL_UP_RESISTOR without affecting operation
+//     1) add pull-down to AUDIO_L pin
 //     2) at power-on-reset, set AUDIO_L to Z & wait a bit
 //     3) set jamma_mode to 1 if AUDIO_L is low
 //     4) connect AUDIO_L to anl
-//     where is power-on-reset?
+// where is power-on-reset?
 // SW[2] doesn't seem to be used for anything. Could use that instead?
-
 
 jamma_in_t jamma_in;
 // No switch debounce logic applied. Assumes cores retain required debounce logic (likely in software)
-assign jamma_in.p[0].udlr      = ~USER_IO[3:0]; // {P7.6, P7.5, P7.2, P7.1} on MiSTer IO board 
-assign jamma_in.p[0].button[5] = ~AUDIO_SPDIF;	// P1.9 on MiSTer IO board. CPS "P0 HEAVY KICK"
-assign jamma_in.p[0].button[4] = ~VGA_VS;		// P1.19 on MiSTer IO board. NeoGeo MVS "SELECT UP". CPS "P0 MEDIUM KICK"
-assign jamma_in.p[0].button[3] = ~USER_IO[6];   // P7.10 on MiSTer IO board. CPS "P0 LIGHT KICK"
-assign jamma_in.p[0].button[2] = ~SD_SPI_CS;    // P7.9 on MiSTer IO board
-assign jamma_in.p[0].button[1] = ~USER_IO[5];   // P7.8 on MiSTer IO board
-assign jamma_in.p[0].button[0] = ~USER_IO[4];   // P7.7 on MiSTer IO board
-assign jamma_in.p[0].coin      = ~SD_SPI_MISO;  // P6.1 on MiSTer IO board
-assign jamma_in.p[0].start     = ~SD_SPI_CLK;   // P6.2 on MiSTer IO board
-assign jamma_in.p[1].udlr      = ~SDIO_DAT;		// {P1.6, P1.4, P1.18, P1.16} on MiSTer IO board 
-assign jamma_in.p[1].button[5] = ~IO_SCL;		// P6.4 on MiSTer IO board. CPS "P1 HEAVY KICK"
-assign jamma_in.p[1].button[4] = ~SDCD_SPDIF;	// P9.1 on MiSTer IO board. NeoGeo MVS "SELECT DOWN". CPS "P1 MEDIUM KICK"
-assign jamma_in.p[1].button[3] = ~SDIO_CLK;		// P1.14 on MiSTer IO board. CPS "P1 LIGHT KICK"
-assign jamma_in.p[1].button[2] = ~SDIO_CMD;		// P1.8 on MiSTer IO board
-assign jamma_in.p[1].button[1] = ~SD_SPI_MOSI;	// P6.3 on MiSTer IO board
-assign jamma_in.p[1].button[0] = ~LED_USER;		// P1.1 on MiSTer IO board
-assign jamma_in.p[1].coin      = ~LED_POWER;	// P1.3 on MiSTer IO board
-assign jamma_in.p[1].start     = ~LED_HDD;		// P1.5 on MiSTer IO board
-assign jamma_in.test		   = ~BTN_USER;		// Usually enables Jamma board test mode. Drive BTN_OSD with this Jamma pin & lose access to Jamma board test modes?
-assign jamma_in.service		   = 0;				// Usually causes Jamma board to add a credit. No point for MiSTer?
-// more pins which could be repurposed for Jamma input
-// IO_SDA, P6.5 on MiSTer IO
-// BTN_OSD, P1.13 on MiSTer IO board
-// BTN_RESET, P1.17 on MiSTer IO board
+// IO_SDA, VGA_EN, BTN_RESET not needed for DE10Jamma & could be repurposed
 
+// Assignment                     MiSTerIO Pin // DE10 Pin
 
+// --------                       P6              JP3
+// spare                          IO_SDA       // Arduino_IO3
+assign jamma_in.p[2].button[6] = ~IO_SCL;      // Arduino_IO4
+assign jamma_in.p[2].button[5] = ~SD_SPI_MOSI; // Arduino_IO5
+assign jamma_in.p[2].button[4] = ~SD_SPI_CLK;  // Arduino_IO6
+assign jamma_in.p[1].button[6] = ~SD_SPI_MISO; // Arduino_IO7
+
+// --------                       P7              JP2
+assign jamma_in.p[1].button[4] = ~USER_IO[6];  // Arduino_IO8
+assign jamma_in.select		   = ~SD_SPI_CS;   // Arduino_IO9
+assign jamma_in.p[1].button[3] = ~USER_IO[5];  // Arduino_IO10
+assign jamma_in.p[1].button[2] = ~USER_IO[4];  // Arduino_IO11
+assign jamma_in.p[1].button[1] = ~USER_IO[3];  // Arduino_IO12
+assign jamma_in.p[1].r         = ~USER_IO[2];  // Arduino_IO13
+//                                NA           // GND
+//                                NA           // Analog_Vref
+assign jamma_in.p[1].l         = ~USER_IO[1];  // SDA
+assign jamma_in.p[1].d         = ~USER_IO[0];  // SCL
+
+// --------                       P9              JP5
+assign jamma_in.p[1].button[5] = ~SDCD_SPDIF;  // Arduino_Reset_n
+
+// --------                       P1              JP7
+assign jamma_in.p[2].u         = ~LED_USER;    // GPIO_1[0]
+// used                           AUDIO_L      // GPIO_1[1]
+assign jamma_in.p[2].d         = ~LED_POWER;   // GPIO_1[2]
+assign jamma_in.p[1].u         = ~SDIO_DAT[2]; // GPIO_1[3]
+assign jamma_in.p[2].l         = ~LED_HDD;     // GPIO_1[4]
+assign jamma_in.p[1].start     = ~SDIO_DAT[3]; // GPIO_1[5]
+// used                           AUDIO_R      // GPIO_1[6]
+assign jamma_in.p[1].coin      = ~SDIO_CMD;    // GPIO_1[7]
+assign jamma_in.p[2].r         = ~AUDIO_SPDIF; // GPIO_1[8]
+// spare                          VGA_EN       // GPIO_1[9]
+assign jamma_in.p[2].button[1] = ~BTN_OSD;     // GPIO_1[10]
+assign jamma_in.p[2].start     = ~SDIO_CLK;    // GPIO_1[11]
+assign jamma_in.p[2].button[2] = ~BTN_USER;    // GPIO_1[12]
+assign jamma_in.p[2].coin      = ~SDIO_DAT[0]; // GPIO_1[13]
+// spare                          BTN_RESET    // GPIO_1[14]
+assign jamma_in.test		   = ~SDIO_DAT[1]; // GPIO_1[15]
+assign jamma_in.p[2].button[3] = ~VGA_VS;      // GPIO_1[16]
+// VGA_HS (composite sync) and RGB follow...
 
 //////////////////////  Secondary SD  ///////////////////////////////////
 
@@ -206,7 +220,7 @@ wire btn_r, btn_o, btn_u;
 `ifdef DUAL_SDRAM
 	assign {btn_r,btn_o,btn_u} = {mcp_btn[1],mcp_btn[2],mcp_btn[0]};
 `else
-	assign {btn_r,btn_o,btn_u} = ~{BTN_RESET,BTN_OSD,BTN_USER} | {mcp_btn[1],mcp_btn[2],mcp_btn[0]};
+	assign {btn_r,btn_o,btn_u} = ~{BTN_RESET,(BTN_OSD & ~jamma_mode),BTN_USER} | {mcp_btn[1],mcp_btn[2],mcp_btn[0]};
 `endif
 
 wire [2:0] mcp_btn;
