@@ -78,14 +78,14 @@ module sys_top
 	input         VGA_EN,  // active low
 
 	/////////// AUDIO //////////
-	output		  AUDIO_L,
-	output		  AUDIO_R,
+	inout		  AUDIO_L,
+	inout		  AUDIO_R,
 	inout		  AUDIO_SPDIF,
 
 	//////////// SDIO ///////////
 	inout   [3:0] SDIO_DAT,
 	inout         SDIO_CMD,
-	output        SDIO_CLK,
+	inout         SDIO_CLK,
 
 	//////////// I/O ///////////
 	inout         LED_USER,
@@ -125,17 +125,8 @@ module sys_top
 	inout   [6:0] USER_IO
 );
 
-//////////////////////  JAMMA Mode  //////////////////////////////////////
-// Input/Output via JAMMA/NeoGeo MVS with minimal active circuitry
-wire jamma_mode;
-assign jamma_mode = 1'b1; // high to enable Jamma Mode
-//     1) add pull-down to AUDIO_L pin
-//     2) at power-on-reset, set AUDIO_L to Z & wait a bit
-//     3) set jamma_mode to 1 if AUDIO_L is low
-//     4) connect AUDIO_L to anl
-// where is power-on-reset?
-// SW[2] doesn't seem to be used for anything. Could use that instead?
-
+//////////////////////  DE10Jamma  //////////////////////////////////////
+// https://github.com/MisterJamma/DE10Jamma
 jamma_in_t jamma_in;
 // No switch debounce logic applied. Assumes cores retain required debounce logic (likely in software)
 // IO_SDA, VGA_EN, BTN_RESET not needed for DE10Jamma & could be repurposed
@@ -220,7 +211,7 @@ wire btn_r, btn_o, btn_u;
 `ifdef DUAL_SDRAM
 	assign {btn_r,btn_o,btn_u} = {mcp_btn[1],mcp_btn[2],mcp_btn[0]};
 `else
-	assign {btn_r,btn_o,btn_u} = ~{BTN_RESET,(BTN_OSD & ~jamma_mode),BTN_USER} | {mcp_btn[1],mcp_btn[2],mcp_btn[0]};
+	assign {btn_r,btn_o,btn_u} = {~BTN_RESET,(jamma_mode?jamma_in.select:~BTN_OSD),~BTN_USER} | {mcp_btn[1],mcp_btn[2],mcp_btn[0]};
 `endif
 
 wire [2:0] mcp_btn;
@@ -474,6 +465,7 @@ cyclonev_hps_interface_interrupts interrupts
 ///////////////////////////  RESET  ///////////////////////////////////
 
 reg reset_req = 0;
+reg jamma_mode = 0;
 always @(posedge FPGA_CLK2_50) begin
 	reg [1:0] resetd, resetd2;
 	reg       old_reset;
@@ -486,6 +478,14 @@ always @(posedge FPGA_CLK2_50) begin
 	//preventing of accidental reset control
 	if(resetd==1) reset_req <= 1;
 	if(resetd==2 && resetd2==0) reset_req <= 0;
+
+	// Detect DE10 Jamma PCB
+	// AUDIO_L and AUDIO_R have 1k pulldown on DE10 Jamma PCB, but have no DC path to GND on MiSTer I/O board
+	// AUDIO_L and AUDIO_R have WEAK_PULL_UP_RESISTOR enabled and are assigned to 1'bZ when reset_req==1
+	// AUDIO_L and AUDIO_R are sampled when reset_req is about to be deasserted
+	// jamma_mode set if both AUDIO_L and AUDIO_R are pulled low
+	if (reset_req==1 && resetd==2 && resetd2==0)
+		jamma_mode = ~(AUDIO_L | AUDIO_R);
 
 	resetd  <= gp_out[31:30];
 	resetd2 <= resetd;
@@ -1058,8 +1058,8 @@ assign SDCD_SPDIF =(SW[3] & ~spdif & ~jamma_mode) ? 1'b0 : 1'bZ;
 	wire anl,anr;
 
 	assign AUDIO_SPDIF = (SW[3] | jamma_mode) ? 1'bZ : SW[0] ? HDMI_LRCLK : spdif;
-	assign AUDIO_R     = SW[3] ? 1'bZ : SW[0] ? HDMI_I2S   : anr;
-	assign AUDIO_L     = SW[3] ? 1'bZ : SW[0] ? HDMI_SCLK  : anl;
+	assign AUDIO_R     = (SW[3] | reset_req)  ? 1'bZ : SW[0] ? HDMI_I2S   : anr;
+	assign AUDIO_L     = (SW[3] | reset_req)  ? 1'bZ : SW[0] ? HDMI_SCLK  : anl;
 `endif
 
 assign HDMI_MCLK = 0;
